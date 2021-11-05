@@ -142,3 +142,8 @@ if __name__ == "__main__":
     context, target = create_contexts_target(corpus)
     context_onehot = convert_one_hot(context, len(word2id))
     print(context_onehot)
+    print(type(corpus))
+
+    from collections import Counter
+
+    print(Counter(corpus))
