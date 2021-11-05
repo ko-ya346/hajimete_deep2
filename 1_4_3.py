@@ -14,6 +14,7 @@ class CFG:
     lr = 0.1
     input_size = 2
     output_size = 3
+    eval_interval = 20
 
 
 def main():
@@ -58,9 +59,6 @@ def main():
                 total_loss, loss_count = 0, 0
             params_dict["params"].append(model.params)
             params_dict["grads"].append(model.grads)
-        if epoch == 29:
-            print(1)
-            print(1)
 
 
 main()
