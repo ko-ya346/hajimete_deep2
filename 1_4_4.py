@@ -1,5 +1,3 @@
-import torch
-
 from datasets.spiral import load_data
 from models.forward_net import TwoLayerNet
 from utils.optimizer import SGD
@@ -18,8 +16,6 @@ class CFG:
 
 def main():
     x, y_true = load_data()
-    x = torch.from_numpy(x).float()
-    y_true = torch.from_numpy(y_true).float()
 
     model = TwoLayerNet(
         input_size=CFG.input_size,

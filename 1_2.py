@@ -1,10 +1,10 @@
-import torch
+import numpy as np
 
 from models.forward_net import TwoLayerNet
 
 
 def main():
-    x = torch.randn((10, 2))
+    x = np.random.randn(10, 2)
     print(x)
 
     model = TwoLayerNet(2, 4, 3)

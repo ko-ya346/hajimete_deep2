@@ -1,6 +1,4 @@
-from typing import Optional
-
-import torch
+import numpy as np
 
 from datasets.spiral import load_data
 from models.forward_net import TwoLayerNet
@@ -19,8 +17,6 @@ class CFG:
 
 def main():
     x, y_true = load_data()
-    x = torch.from_numpy(x).float()
-    y_true = torch.from_numpy(y_true).float()
 
     model = TwoLayerNet(
         input_size=CFG.input_size,
@@ -38,7 +34,7 @@ def main():
     params_dict = {"params": [], "grads": []}
 
     for epoch in range(CFG.epoch):
-        idx = torch.randperm(data_size)
+        idx = np.random.permutation(data_size)
         x = x[idx]
         y_true = y_true[idx]
 
