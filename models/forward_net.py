@@ -1,4 +1,4 @@
-import torch
+import numpy as np
 from utils.layers import Affine, Sigmoid, SoftmaxWithLoss
 
 
@@ -8,10 +8,10 @@ class TwoLayerNet:
 
         # init W, b
         # 重みが小さいほうが学習がうまく進む
-        W1 = 0.01 * torch.randn(I, H)
-        b1 = torch.zeros(H)
-        W2 = 0.01 * torch.randn(H, O)
-        b2 = torch.zeros(O)
+        W1 = 0.01 * np.random.randn(I, H)
+        b1 = np.zeros(H)
+        W2 = 0.01 * np.random.randn(H, O)
+        b2 = np.zeros(O)
 
         # レイヤー生成
         self.layers = [Affine(W1, b1), Sigmoid(), Affine(W2, b2)]

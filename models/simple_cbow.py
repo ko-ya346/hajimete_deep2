@@ -1,6 +1,6 @@
 import sys
 
-import torch
+import numpy as np
 
 sys.path.append("../utils")
 
@@ -12,8 +12,8 @@ class SimpleCBOW:
         V, H = vocab_size, hidden_size
 
         # init weight
-        W_in = 0.01 * torch.randn((V, H)).float()
-        W_out = 0.01 * torch.randn((H, V)).float()
+        W_in = 0.01 * np.random.randn(V, H)
+        W_out = 0.01 * np.random.randn(H, V)
 
         self.in_layer0 = MatMul(W_in)
         self.in_layer1 = MatMul(W_in)

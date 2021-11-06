@@ -1,6 +1,6 @@
 import sys
 
-import torch
+import numpy as np
 
 sys.path.append("../utils")
 
@@ -12,8 +12,8 @@ class CBOW:
         V, H = vocab_size, hidden_size
 
         # init weight
-        W_in = 0.01 * torch.randn((V, H)).float()
-        W_out = 0.01 * torch.randn((V, H)).float()
+        W_in = 0.01 * np.random.randn(V, H)
+        W_out = 0.01 * np.random.randn(V, H)
 
         self.in_layers = []
         for i in range(2 * window_size):
