@@ -1,0 +1,34 @@
+General:
+  name: seq2seq_addition
+  output_dir: "./output"
+  seed: 20
+  epoch: 10
+  trainer:
+    # ここの引数ほとんど分からんまま使ってる
+    gpus: 1
+    accumulate_grad_batches: 1
+    progress_bar_refresh_rate: 1
+    fast_dev_run: False
+    num_sanity_val_steps: 0
+    resume_from_checkpoint: None
+
+dataloader:
+  train:
+    batch_size: 16
+    shuffle: True
+  valid:
+    batch_size: 16
+    shuffle: False
+
+model:
+  params:
+    num_layers: 2
+    hidden_size: 16
+    
+
+optimizer:
+  name: optim.SGD
+  params:
+    lr: !!python/float 1e-5
+
+loss: nn.CrossEntropyLoss
