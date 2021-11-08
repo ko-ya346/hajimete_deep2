@@ -438,6 +438,7 @@ class TimeEmbedding:
         self.W = W
 
     def forward(self, xs):
+        # N: バッチサイズ, T: 時系列, D: 単語ベクトルの次元数
         N, T = xs.shape
         _, D = self.W.shape
 
