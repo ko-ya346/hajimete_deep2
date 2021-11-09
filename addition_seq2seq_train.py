@@ -1,11 +1,13 @@
 import warnings
+from glob import glob
 
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning import callbacks
-from pytorch_lightning.callbacks import early_stopping
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.utilities.seed import seed_everything
+from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
 from datasets.addition_dataset import AdditionDataModule, Tokenizer
 from models.seq2seq import PLModel
@@ -33,6 +35,9 @@ def main():
     sep_idx = 40000
     x_train = tokenizer.questions[:sep_idx, :]
     t_train = tokenizer.answers[:sep_idx, :]
+    # 順序を反転させた学習データを追加
+    x_train = torch.cat((x_train, torch.flip(x_train, [1])), axis=0)
+    t_train = torch.cat((t_train, t_train))
     x_val = tokenizer.questions[sep_idx:, :]
     t_val = tokenizer.answers[sep_idx:, :]
     datamodule = AdditionDataModule(x_train, t_train, x_val, t_val, cfg)
@@ -46,12 +51,28 @@ def main():
         filename="best_loss", monitor="valid_loss", mode="min", dirpath="./output"
     )
     early_stopping = EarlyStopping(monitor="valid_loss", patience=3)
+    logger = TensorBoardLogger("./output")
     trainer = pl.Trainer(
         max_epochs=cfg.General.epoch,
+        logger=logger,
         callbacks=[loss_checkpoint, early_stopping],
         **cfg.General.trainer
     )
     trainer.fit(model, datamodule=datamodule)
+
+    # CV score
+
+    event_path = glob("./output/default/version_*")[-1]
+    event_acc = EventAccumulator(event_path, size_guidance={"scalars": 0})
+    event_acc.Reload()
+
+    scalars = {}
+    for tag in event_acc.Tags()["scalars"]:
+        events = event_acc.Scalars(tag)
+        scalars[tag] = [event.value for event in events]
+
+    print("valid_loss")
+    print(scalars["valid_loss"])
 
 
 main()
