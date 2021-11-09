@@ -14,21 +14,25 @@ General:
 
 dataloader:
   train:
-    batch_size: 16
+    batch_size: 512
     shuffle: True
+    num_workers: 4
+    drop_last: True
   valid:
-    batch_size: 16
+    batch_size: 512
     shuffle: False
+    num_workers: 4
+    drop_last: True
 
 model:
   params:
-    num_layers: 2
-    hidden_size: 16
+    num_layers: 4
+    hidden_size: 128
     
 
 optimizer:
-  name: optim.SGD
+  name: optim.AdamW
   params:
-    lr: !!python/float 1e-5
+    lr: !!python/float 1e-0
 
-loss: nn.CrossEntropyLoss
+loss: nn.BCEWithLogitsLoss
