@@ -19,6 +19,7 @@ class Encoder(nn.Module):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.embedding = nn.Embedding(input_size, hidden_size)
+        self.device = "cuda"
 
         # batch_first: (seq, batch, feature) -> (batch, seq, feature) に置き換える
         self.lstm = nn.LSTM(hidden_size, output_size, num_layers, batch_first=True)
@@ -30,7 +31,10 @@ class Encoder(nn.Module):
 
     def init_hidden(self, batch_size):
         state_dim = (self.num_layers, batch_size, self.input_size)
-        return (torch.zeros(state_dim), torch.zeros(state_dim))
+        return (
+            torch.zeros(state_dim, device=self.device),
+            torch.zeros(state_dim, device=self.device),
+        )
 
 
 class Decoder(nn.Module):
@@ -43,6 +47,7 @@ class Decoder(nn.Module):
         self.embedding = nn.Embedding(input_size, hidden_size)
         self.lstm = nn.LSTM(hidden_size, output_size, num_layers, batch_first=True)
         self.linear = nn.Linear(output_size, output_size)
+        self.device = "cuda"
 
     def forward(self, xs, states):
         xs = self.embedding(xs)
@@ -53,7 +58,10 @@ class Decoder(nn.Module):
 
     def init_hidden(self, batch_size):
         state_dim = (self.num_layers, batch_size, self.input_size)
-        return (torch.zeros(state_dim), torch.zeros(state_dim))
+        return (
+            torch.zeros(state_dim, device=self.device),
+            torch.zeros(state_dim, device=self.device),
+        )
 
 
 class Seq2seq(nn.Module):
@@ -75,8 +83,6 @@ class Seq2seq(nn.Module):
             cfg.model.params.num_layers,
             output_size,
         )
-        print(self.encoder.requires_grad)
-        print(self.decoder.requires_grad)
         self.softmax = nn.Softmax()
         self.encoder_hidden = self.encoder.init_hidden(batch_size)
         # decoderの初期重みはencoderから受け取るので不要
@@ -94,13 +100,14 @@ class PLModel(pl.LightningModule):
         """
         cfg: dict
         """
+        super().__init__()
         self.input_size = input_size
         self.output_size = output_size
         self.batch_size = batch_size
-        super().__init__()
         self.cfg = cfg
         self.__build_model()
-        self._criterion = eval(self.cfg.loss)()
+        # self._criterion = eval(self.cfg.loss)()
+        self._criterion = nn.BCEWithLogitsLoss()
 
     def __build_model(self):
         self.model = Seq2seq(
@@ -113,10 +120,12 @@ class PLModel(pl.LightningModule):
 
     def __share_step(self, batch):
         feature, target = batch
+
         score = self.forward(feature, target)
-        pred = torch.argmax(score, axis=2).float()
-        loss = self._criterion(pred, target.float())
-        pred = pred.detach().cpu()
+        target = F.one_hot(target, num_classes=self.input_size).float()
+
+        loss = self._criterion(score, target)
+        pred = score.detach().cpu()
         target = target.detach().cpu()
         return loss, pred, target
 
