@@ -145,7 +145,10 @@ class PLModel(pl.LightningModule):
             targets.append(target)
         preds = torch.cat(preds)
         targets = torch.cat(targets)
-        self.log(f"{mode}_loss", out["loss"])
+
+        # 正解率
+        metrics = torch.sum(preds == targets) / len(preds) * 100
+        self.log(f"{mode}_loss", metrics)
 
     def training_epoch_end(self, outputs):
         self.__share_epoch_end(outputs, "train")
