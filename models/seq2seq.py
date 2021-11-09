@@ -106,8 +106,7 @@ class PLModel(pl.LightningModule):
         self.batch_size = batch_size
         self.cfg = cfg
         self.__build_model()
-        # self._criterion = eval(self.cfg.loss)()
-        self._criterion = nn.BCEWithLogitsLoss()
+        self._criterion = eval(self.cfg.loss)()
 
     def __build_model(self):
         self.model = Seq2seq(
