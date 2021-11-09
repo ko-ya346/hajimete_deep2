@@ -1,12 +1,17 @@
-from os import read
+import warnings
 
 import pytorch_lightning as pl
-from pytorch_lightning.core import datamodule
+import torch
+from pytorch_lightning import callbacks
+from pytorch_lightning.callbacks import early_stopping
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.utilities.seed import seed_everything
 
-from datasets.addition_dataset import AdditionDataModule, AdditionDataset, Tokenizer
+from datasets.addition_dataset import AdditionDataModule, Tokenizer
 from models.seq2seq import PLModel
 from utils.factory import read_yaml
+
+warnings.filterwarnings("ignore")
 
 
 def main():
@@ -15,6 +20,7 @@ def main():
     DATAPATH = "./datasets/addition.txt"
 
     # load config
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     cfg = read_yaml(CONFIG_PATH)
     seed_everything(cfg.General.seed)
 
@@ -35,8 +41,16 @@ def main():
     ## batch_sizeはtrainとvalid別で指定しているが、どちらも同じ値
     ## 変えると何かまずいのか
     model = PLModel(input_size, output_size, cfg.dataloader.train.batch_size, cfg)
-    model.train()
-    trainer = pl.Trainer(max_epochs=cfg.General.epoch)
+
+    loss_checkpoint = callbacks.ModelCheckpoint(
+        filename="best_loss", monitor="valid_loss", mode="min", dirpath="./output"
+    )
+    early_stopping = EarlyStopping(monitor="valid_loss", patience=3)
+    trainer = pl.Trainer(
+        max_epochs=cfg.General.epoch,
+        callbacks=[loss_checkpoint, early_stopping],
+        **cfg.General.trainer
+    )
     trainer.fit(model, datamodule=datamodule)
 
 
