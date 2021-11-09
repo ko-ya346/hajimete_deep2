@@ -19,6 +19,8 @@ class Encoder(nn.Module):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.embedding = nn.Embedding(input_size, hidden_size)
+        self.init_h = nn.Linear(input_size, output_size)
+        self.init_c = nn.Linear(input_size, output_size)
         self.device = "cuda"
 
         # batch_first: (seq, batch, feature) -> (batch, seq, feature) に置き換える
@@ -26,15 +28,21 @@ class Encoder(nn.Module):
 
     def forward(self, xs, states):
         xs = self.embedding(xs)
+        states = self.set_hidden_state(states)
         xs, (h, c) = self.lstm(xs, states)
         return xs, (h, c)
 
     def init_hidden(self, batch_size):
         state_dim = (self.num_layers, batch_size, self.input_size)
         return (
-            torch.zeros(state_dim, device=self.device),
-            torch.zeros(state_dim, device=self.device),
+            torch.randn(state_dim, device=self.device),
+            torch.randn(state_dim, device=self.device),
         )
+
+    def set_hidden_state(self, states):
+        h = self.init_h(states[0])
+        c = self.init_c(states[1])
+        return (h, c)
 
 
 class Decoder(nn.Module):
@@ -47,21 +55,22 @@ class Decoder(nn.Module):
         self.embedding = nn.Embedding(input_size, hidden_size)
         self.lstm = nn.LSTM(hidden_size, output_size, num_layers, batch_first=True)
         self.linear = nn.Linear(output_size, output_size)
+        self.init_h = nn.Linear(input_size, output_size)
+        self.init_c = nn.Linear(input_size, output_size)
         self.device = "cuda"
 
     def forward(self, xs, states):
+        states = self.set_hidden_state(states)
         xs = self.embedding(xs)
         xs = F.relu(xs)
         xs, (h, c) = self.lstm(xs, states)
         xs = self.linear(xs)
         return xs, (h, c)
 
-    def init_hidden(self, batch_size):
-        state_dim = (self.num_layers, batch_size, self.input_size)
-        return (
-            torch.zeros(state_dim, device=self.device),
-            torch.zeros(state_dim, device=self.device),
-        )
+    def set_hidden_state(self, states):
+        h = self.init_h(states[0])
+        c = self.init_c(states[1])
+        return (h, c)
 
 
 class Seq2seq(nn.Module):
@@ -83,7 +92,7 @@ class Seq2seq(nn.Module):
             cfg.model.params.num_layers,
             output_size,
         )
-        self.softmax = nn.Softmax()
+        self.softmax = nn.Softmax(dim=2)
         self.encoder_hidden = self.encoder.init_hidden(batch_size)
         # decoderの初期重みはencoderから受け取るので不要
         # self.decoder_hidden = decoder.init_hidden(batch_size)
@@ -92,6 +101,7 @@ class Seq2seq(nn.Module):
         _, states = self.encoder(xs, self.encoder_hidden)
         output_decoder, _ = self.decoder(ts, states)
         output = self.softmax(output_decoder)
+
         return output
 
 
