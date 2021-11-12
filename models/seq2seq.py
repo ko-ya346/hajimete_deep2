@@ -20,6 +20,7 @@ class Encoder(nn.Module):
         self.embedding = nn.Embedding(vocab_size, hidden_dim)
         self.init_h = nn.Linear(vocab_size, vocab_size)
         self.init_c = nn.Linear(vocab_size, vocab_size)
+        self.out = nn.Linear(vocab_size, vocab_size)
         self.device = "cuda"
 
         # batch_first: (seq, batch, feature) -> (batch, seq, feature) に置き換える
@@ -29,13 +30,14 @@ class Encoder(nn.Module):
         x = self.embedding(x)
         states = self.set_hidden_state(states)
         x, (h, c) = self.lstm(x, states)
-        return x, (h, c)
+        out = self.out(x)
+        return out, (h, c)
 
     def init_hidden(self, batch_size):
         state_dim = (self.num_layers, batch_size, self.vocab_size)
         return (
-            torch.randn(state_dim, device=self.device),
-            torch.randn(state_dim, device=self.device),
+            torch.rand(state_dim, device=self.device),
+            torch.rand(state_dim, device=self.device),
         )
 
     def set_hidden_state(self, states):
@@ -66,8 +68,8 @@ class Decoder(nn.Module):
         x = self.embedding(x)
         x = F.relu(x)
         x, (h, c) = self.lstm(x, states)
-        x = self.linear(x)
-        return x, (h, c)
+        out = self.out(x)
+        return out, (h, c)
 
     def set_hidden_state(self, states):
         h = self.init_h(states[0])
@@ -115,13 +117,14 @@ class DecoderWithAttention(nn.Module):
 
         self.init_h = nn.Linear(vocab_size, vocab_size)
         self.init_c = nn.Linear(vocab_size, vocab_size)
+        self.out = nn.Linear(vocab_size * 2, vocab_size)
 
         self.attention = Attention(vocab_size, vocab_size, attention_dim)
         self.device = "cuda"
 
     def forward(self, encoder_out, targets, states):
         encoder_emb = self.embedding(targets)
-        encoder_emb = F.relu(encoder_emb)  # (batch_size, encoder_seq_length, embed_dim)
+        # encoder_emb = F.relu(encoder_emb)  # (batch_size, encoder_seq_length, embed_dim)
 
         states = self.set_hidden_state(states)
 
@@ -135,9 +138,11 @@ class DecoderWithAttention(nn.Module):
             2, 1
         )  # (batch_size, decoder_seq_length, encoder_seq_length)
 
-        out = torch.bmm(
+        context_vector = torch.bmm(
             attention_weight, encoder_out
-        )  # (batch_size, decoder_seq_length, embed_dim)
+        )  # (batch_size, decoder_seq_length, vocab_size)
+
+        out = self.out(torch.cat((context_vector, lstm_out), dim=2))
 
         return out
 
@@ -191,7 +196,7 @@ class Seq2seq(nn.Module):
 
 
 class PLModel(pl.LightningModule):
-    def __init__(self, vocab_size, batch_size, cfg):
+    def __init__(self, vocab_size, batch_size, cfg, tokenizer):
         """
         cfg: dict
         """
@@ -200,7 +205,7 @@ class PLModel(pl.LightningModule):
         self.batch_size = batch_size
         self.cfg = cfg
         self.__build_model()
-        self._criterion = eval(self.cfg.loss)()
+        self._criterion = eval(self.cfg.loss)(ignore_index=tokenizer.char2id["_"])
 
     def __build_model(self):
         self.model = Seq2seq(self.vocab_size, self.batch_size, self.cfg)
@@ -213,7 +218,8 @@ class PLModel(pl.LightningModule):
         feature, target = batch
 
         score = self.forward(feature, target)
-        target = F.one_hot(target, num_classes=self.vocab_size).float()
+        score = score.transpose(2, 1)  # (batch_size, vocab_size, decoder_seq_length)
+        # target: (batch_size, decoder_seq_length)
 
         loss = self._criterion(score, target)
         pred = score.detach().cpu()
@@ -238,14 +244,15 @@ class PLModel(pl.LightningModule):
         preds = torch.cat(preds)
         targets = torch.cat(targets)
 
-        preds_id = torch.argmax(preds, dim=2)
-        targets_id = torch.argmax(targets, dim=2)
-        print(preds_id.shape)
-        print(targets_id.shape)
-        print(preds_id[:3])
-        print(targets_id[:3])
+        preds_id = torch.argmax(preds, dim=1)
         # 正解率
-        metrics = torch.sum(preds_id == targets_id) / len(preds_id) * 100
+        metrics = (
+            torch.sum(preds_id == targets) / (preds.shape[0] * preds.shape[1]) * 100
+        )
+        print("preds_id: ", preds_id[:3])
+        print("targets: ", targets[:3])
+        print(outputs[0]["loss"])
+        print("metrics: ", metrics)
         self.log(f"{mode}_loss", metrics)
 
     def training_epoch_end(self, outputs):
