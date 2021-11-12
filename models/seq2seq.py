@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 
+# TODO: パラメータの変数名をわかりやすくしたい。size -> dimにしたい（打ちやすいので）
 class Encoder(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, output_size):
         """
@@ -66,6 +67,9 @@ class Decoder(nn.Module):
         self.device = "cuda"
 
     def forward(self, xs, states):
+        """
+        states: encoderの最終
+        """
         states = self.set_hidden_state(states)
         xs = self.embedding(xs)
         xs = F.relu(xs)
@@ -88,25 +92,26 @@ class Attention(nn.Module):
         super().__init__()
         self.encoder_att = nn.Linear(encoder_dim, attention_dim)
         self.decoder_att = nn.Linear(decoder_dim, attention_dim)
-        self.full_att = nn.Linear(attention_dim, 1)
-        self.relu = nn.ReLU()
         self.softmax = nn.Softmax(dim=1)
 
     def forward(self, encoder_out, decoder_hidden):
         """
         attention_dimってhidden_dimと一緒？
         """
-        att1 = self.encoder_att(encoder_out)  # (batch_size, time, attention_dim)
-        att2 = self.decoder_att(decoder_hidden)  # (batch_size, attention_dim)
-        att = self.full_att(self.relu(att1 + att2.unsqueeze(1))).squeeze(
-            2
-        )  # (batch_size, time)
-        alpha = self.softmax(att)  # (batch_size, time)
-
-        attention_weighted_encoding = (encoder_out * alpha.unsqueeze(2)).sum(
-            dim=1
-        )  # (batch_size, encoder_dim)
-        return attention_weighted_encoding, alpha
+        att1 = self.encoder_att(
+            encoder_out
+        )  # (batch_size, encoder_seq_length, attention_dim)
+        att2 = self.decoder_att(
+            decoder_hidden
+        )  # (batch_size, decoder_seq_length, attention_dim)
+        att2 = att2.transpose(2, 1)  # (batch_size, attention_dim, decoder_seq_length)
+        att = torch.bmm(
+            att1, att2
+        )  # (batch_size, encoder_seq_length, decoder_seq_length)
+        alpha = self.softmax(
+            att
+        )  # (batch_size, encoder_seq_length, decoder_seq_length)
+        return alpha
 
 
 class DecoderWithAttention(nn.Module):
@@ -121,27 +126,41 @@ class DecoderWithAttention(nn.Module):
         # TODO: Embeddingの第二引数（埋め込み次元）は自由に決められるので
         # emb_dimというインスタンス変数を追加したい
         self.embedding = nn.Embedding(input_size, hidden_size)
-        self.lstm_cell = nn.LSTMCell(hidden_size, output_size, bias=True)
-        self.linear = nn.Linear(output_size, output_size)
+        self.lstm = nn.LSTM(hidden_size, output_size, num_layers, batch_first=True)
+
         self.init_h = nn.Linear(input_size, output_size)
         self.init_c = nn.Linear(input_size, output_size)
 
         # TODO: Attentionの引数、隠れ状態の次元数がencoderとdecoderで一致していない場合に対応してない
         # インスタンス変数に加えるべき
-        self.attention = Attention(hidden_size, hidden_size, attention_size)
+        self.attention = Attention(input_size, output_size, attention_size)
         self.device = "cuda"
 
     def forward(self, encoder_out, targets, states):
-        """
-        targets: (batch_size, time)
-        """
-        xs = self.embedding(targets)
-        xs = F.relu(xs)
+        encoder_emb = self.embedding(targets)
+        encoder_emb = F.relu(
+            encoder_emb
+        )  # (batch_size, encoder_seq_length, embed_size)
 
         states = self.set_hidden_state(states)
-        xs, (h, c) = self.lstm(xs, states)
-        xs = self.linear(xs)
-        return xs, (h, c)
+
+        lstm_out, _ = self.lstm(
+            encoder_emb, states
+        )  # (batch_size, decoder_seq_length, output_size)
+        print("lstm_out.shape)", lstm_out.shape)
+        attention_weight = self.attention(
+            encoder_out, lstm_out
+        )  # (batch_size, encoder_seq_length, decoder_seq_length)
+        attention_weight = attention_weight.transpose(
+            2, 1
+        )  # (batch_size, decoder_seq_length, encoder_seq_length)
+
+        out = torch.bmm(
+            attention_weight, encoder_out
+        )  # (batch_size, decoder_seq_length, embed_size)
+        print("out.shape", out.shape)
+
+        return out
 
     def set_hidden_state(self, states):
         h = self.init_h(states[0])
