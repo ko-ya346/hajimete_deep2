@@ -26,13 +26,16 @@ dataloader:
 
 model:
   params:
+    attention_flg: 1
     num_layers: 4
-    hidden_size: 128
+    hidden_dim: 128
+    embed_dim: 64
+    attention_dim: 32
     
 
 optimizer:
   name: optim.AdamW
   params:
-    lr: !!python/float 1e-0
+    lr: !!python/float 1e-1
 
 loss: nn.BCEWithLogitsLoss

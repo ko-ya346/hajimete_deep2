@@ -35,9 +35,6 @@ def main():
     sep_idx = 40000
     x_train = tokenizer.questions[:sep_idx, :]
     t_train = tokenizer.answers[:sep_idx, :]
-    # 順序を反転させた学習データを追加
-    # x_train = torch.cat((x_train, torch.flip(x_train, [1])), axis=0)
-    # t_train = torch.cat((t_train, t_train))
     x_val = tokenizer.questions[sep_idx:, :]
     t_val = tokenizer.answers[sep_idx:, :]
     datamodule = AdditionDataModule(x_train, t_train, x_val, t_val, cfg)
@@ -45,12 +42,12 @@ def main():
     # set model
     ## batch_sizeはtrainとvalid別で指定しているが、どちらも同じ値
     ## 変えると何かまずいのか
-    model = PLModel(input_size, output_size, cfg.dataloader.train.batch_size, cfg)
+    model = PLModel(input_size, cfg.dataloader.train.batch_size, cfg)
 
     loss_checkpoint = callbacks.ModelCheckpoint(
         filename="best_loss", monitor="valid_loss", mode="min", dirpath="./output"
     )
-    early_stopping = EarlyStopping(monitor="valid_loss", patience=3)
+    early_stopping = EarlyStopping(monitor="valid_loss", patience=5)
     logger = TensorBoardLogger("./output")
     trainer = pl.Trainer(
         max_epochs=cfg.General.epoch,

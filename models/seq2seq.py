@@ -5,40 +5,34 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 
-# TODO: パラメータの変数名をわかりやすくしたい。size -> dimにしたい（打ちやすいので）
 class Encoder(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size):
+    def __init__(self, vocab_size, hidden_dim, num_layers):
         """
-        input_size: vocab_size
-        hidden_size: 単語IDのベクトルの次元数(好きに決めれる)
+        vocab_size: 語彙数
+        hidden_dim: 単語IDのベクトルの次元数(好きに決めれる)
         num_layers: LSTMレイヤの総数(好きに決めれる)
-        output_size: 出力長の最大長さ
-
         """
         super().__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
+        self.vocab_size = vocab_size
+        self.hidden_dim = hidden_dim
         self.num_layers = num_layers
 
-        # TODO: Embeddingの第二引数（埋め込み次元）は自由に決められるので
-        # emb_dimというインスタンス変数を追加したい
-        self.embedding = nn.Embedding(input_size, hidden_size)
-        self.init_h = nn.Linear(input_size, output_size)
-        self.init_c = nn.Linear(input_size, output_size)
+        self.embedding = nn.Embedding(vocab_size, hidden_dim)
+        self.init_h = nn.Linear(vocab_size, vocab_size)
+        self.init_c = nn.Linear(vocab_size, vocab_size)
         self.device = "cuda"
 
         # batch_first: (seq, batch, feature) -> (batch, seq, feature) に置き換える
-        self.lstm = nn.LSTM(hidden_size, output_size, num_layers, batch_first=True)
+        self.lstm = nn.LSTM(hidden_dim, vocab_size, num_layers, batch_first=True)
 
-    def forward(self, xs, states):
-        # embeddingのあと、次元どうなるっけ？
-        xs = self.embedding(xs)
+    def forward(self, x, states):
+        x = self.embedding(x)
         states = self.set_hidden_state(states)
-        xs, (h, c) = self.lstm(xs, states)
-        return xs, (h, c)
+        x, (h, c) = self.lstm(x, states)
+        return x, (h, c)
 
     def init_hidden(self, batch_size):
-        state_dim = (self.num_layers, batch_size, self.input_size)
+        state_dim = (self.num_layers, batch_size, self.vocab_size)
         return (
             torch.randn(state_dim, device=self.device),
             torch.randn(state_dim, device=self.device),
@@ -51,31 +45,29 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size):
+    def __init__(self, vocab_size, hidden_dim, num_layers):
         super().__init__()
-        self.input_size = input_size
+        self.vocab_size = vocab_size
         self.num_layers = num_layers
-        self.hidden_size = hidden_size
+        self.hidden_dim = hidden_dim
 
-        # TODO: Embeddingの第二引数（埋め込み次元）は自由に決められるので
-        # emb_dimというインスタンス変数を追加したい
-        self.embedding = nn.Embedding(input_size, hidden_size)
-        self.lstm = nn.LSTM(hidden_size, output_size, num_layers, batch_first=True)
-        self.linear = nn.Linear(output_size, output_size)
-        self.init_h = nn.Linear(input_size, output_size)
-        self.init_c = nn.Linear(input_size, output_size)
+        self.embedding = nn.Embedding(vocab_size, hidden_dim)
+        self.lstm = nn.LSTM(hidden_dim, vocab_size, num_layers, batch_first=True)
+        self.out = nn.Linear(vocab_size, vocab_size)
+        self.init_h = nn.Linear(vocab_size, vocab_size)
+        self.init_c = nn.Linear(vocab_size, vocab_size)
         self.device = "cuda"
 
-    def forward(self, xs, states):
+    def forward(self, x, states):
         """
-        states: encoderの最終
+        states: encoderが出力した隠れ状態
         """
         states = self.set_hidden_state(states)
-        xs = self.embedding(xs)
-        xs = F.relu(xs)
-        xs, (h, c) = self.lstm(xs, states)
-        xs = self.linear(xs)
-        return xs, (h, c)
+        x = self.embedding(x)
+        x = F.relu(x)
+        x, (h, c) = self.lstm(x, states)
+        x = self.linear(x)
+        return x, (h, c)
 
     def set_hidden_state(self, states):
         h = self.init_h(states[0])
@@ -95,9 +87,6 @@ class Attention(nn.Module):
         self.softmax = nn.Softmax(dim=1)
 
     def forward(self, encoder_out, decoder_hidden):
-        """
-        attention_dimってhidden_dimと一緒？
-        """
         att1 = self.encoder_att(
             encoder_out
         )  # (batch_size, encoder_seq_length, attention_dim)
@@ -115,39 +104,30 @@ class Attention(nn.Module):
 
 
 class DecoderWithAttention(nn.Module):
-    def __init__(
-        self, input_size, hidden_size, num_layers, output_size, attention_size
-    ):
+    def __init__(self, vocab_size, hidden_dim, num_layers, attention_dim):
         super().__init__()
-        self.input_size = input_size
+        self.vocab_size = vocab_size
         self.num_layers = num_layers
-        self.hidden_size = hidden_size
+        self.hidden_dim = hidden_dim
 
-        # TODO: Embeddingの第二引数（埋め込み次元）は自由に決められるので
-        # emb_dimというインスタンス変数を追加したい
-        self.embedding = nn.Embedding(input_size, hidden_size)
-        self.lstm = nn.LSTM(hidden_size, output_size, num_layers, batch_first=True)
+        self.embedding = nn.Embedding(vocab_size, hidden_dim)
+        self.lstm = nn.LSTM(hidden_dim, vocab_size, num_layers, batch_first=True)
 
-        self.init_h = nn.Linear(input_size, output_size)
-        self.init_c = nn.Linear(input_size, output_size)
+        self.init_h = nn.Linear(vocab_size, vocab_size)
+        self.init_c = nn.Linear(vocab_size, vocab_size)
 
-        # TODO: Attentionの引数、隠れ状態の次元数がencoderとdecoderで一致していない場合に対応してない
-        # インスタンス変数に加えるべき
-        self.attention = Attention(input_size, output_size, attention_size)
+        self.attention = Attention(vocab_size, vocab_size, attention_dim)
         self.device = "cuda"
 
     def forward(self, encoder_out, targets, states):
         encoder_emb = self.embedding(targets)
-        encoder_emb = F.relu(
-            encoder_emb
-        )  # (batch_size, encoder_seq_length, embed_size)
+        encoder_emb = F.relu(encoder_emb)  # (batch_size, encoder_seq_length, embed_dim)
 
         states = self.set_hidden_state(states)
 
         lstm_out, _ = self.lstm(
             encoder_emb, states
-        )  # (batch_size, decoder_seq_length, output_size)
-        print("lstm_out.shape)", lstm_out.shape)
+        )  # (batch_size, decoder_seq_length, vocab_size)
         attention_weight = self.attention(
             encoder_out, lstm_out
         )  # (batch_size, encoder_seq_length, decoder_seq_length)
@@ -157,8 +137,7 @@ class DecoderWithAttention(nn.Module):
 
         out = torch.bmm(
             attention_weight, encoder_out
-        )  # (batch_size, decoder_seq_length, embed_size)
-        print("out.shape", out.shape)
+        )  # (batch_size, decoder_seq_length, embed_dim)
 
         return out
 
@@ -173,50 +152,58 @@ class Seq2seq(nn.Module):
     Encoder, Decoderをまとめただけ
     """
 
-    def __init__(self, input_size, output_size, batch_size, cfg):
+    def __init__(self, vocab_size, batch_size, cfg):
         super().__init__()
+        self.attention_flg = cfg.model.params.attention_flg
         self.encoder = Encoder(
-            input_size,
-            cfg.model.params.hidden_size,
+            vocab_size,
+            cfg.model.params.hidden_dim,
             cfg.model.params.num_layers,
-            input_size,
         )
-        self.decoder = Decoder(
-            input_size,
-            cfg.model.params.hidden_size,
-            cfg.model.params.num_layers,
-            output_size,
-        )
+        if self.attention_flg:
+            self.decoder = DecoderWithAttention(
+                vocab_size,
+                cfg.model.params.hidden_dim,
+                cfg.model.params.num_layers,
+                cfg.model.params.attention_dim,
+            )
+        else:
+            self.decoder = Decoder(
+                vocab_size,
+                cfg.model.params.hidden_dim,
+                cfg.model.params.num_layers,
+            )
         self.softmax = nn.Softmax(dim=2)
         self.encoder_hidden = self.encoder.init_hidden(batch_size)
         # decoderの初期重みはencoderから受け取るので不要
         # self.decoder_hidden = decoder.init_hidden(batch_size)
 
-    def forward(self, xs, ts):
-        _, states = self.encoder(xs, self.encoder_hidden)
-        output_decoder, _ = self.decoder(ts, states)
-        output = self.softmax(output_decoder)
+    def forward(self, x, t):
+        encoder_out, states = self.encoder(x, self.encoder_hidden)
+        if self.attention_flg:
+            out = self.decoder.forward(encoder_out, t, states)
+        else:
+            out = self.decoder.forward(t, states)
 
-        return output
+        out = self.softmax(out)
+
+        return out
 
 
 class PLModel(pl.LightningModule):
-    def __init__(self, input_size, output_size, batch_size, cfg):
+    def __init__(self, vocab_size, batch_size, cfg):
         """
         cfg: dict
         """
         super().__init__()
-        self.input_size = input_size
-        self.output_size = output_size
+        self.vocab_size = vocab_size
         self.batch_size = batch_size
         self.cfg = cfg
         self.__build_model()
         self._criterion = eval(self.cfg.loss)()
 
     def __build_model(self):
-        self.model = Seq2seq(
-            self.input_size, self.output_size, self.batch_size, self.cfg
-        )
+        self.model = Seq2seq(self.vocab_size, self.batch_size, self.cfg)
 
     def forward(self, x, t):
         out = self.model(x, t)
@@ -226,7 +213,7 @@ class PLModel(pl.LightningModule):
         feature, target = batch
 
         score = self.forward(feature, target)
-        target = F.one_hot(target, num_classes=self.input_size).float()
+        target = F.one_hot(target, num_classes=self.vocab_size).float()
 
         loss = self._criterion(score, target)
         pred = score.detach().cpu()
@@ -251,8 +238,14 @@ class PLModel(pl.LightningModule):
         preds = torch.cat(preds)
         targets = torch.cat(targets)
 
+        preds_id = torch.argmax(preds, dim=2)
+        targets_id = torch.argmax(targets, dim=2)
+        print(preds_id.shape)
+        print(targets_id.shape)
+        print(preds_id[:3])
+        print(targets_id[:3])
         # 正解率
-        metrics = torch.sum(preds == targets) / len(preds) * 100
+        metrics = torch.sum(preds_id == targets_id) / len(preds_id) * 100
         self.log(f"{mode}_loss", metrics)
 
     def training_epoch_end(self, outputs):
