@@ -79,6 +79,10 @@ class Tokenizer:
         answers_id = [torch.tensor([self.char2id[qq] for qq in q]) for q in answers]
 
         # 長さをそろえる
-        questions_id_padded = nn.utils.rnn.pad_sequence(questions_id).transpose(1, 0)
-        answers_id_padded = nn.utils.rnn.pad_sequence(answers_id).transpose(1, 0)
+        questions_id_padded = nn.utils.rnn.pad_sequence(
+            questions_id, padding_value=self.char2id["_"]
+        ).transpose(1, 0)
+        answers_id_padded = nn.utils.rnn.pad_sequence(
+            answers_id, padding_value=self.char2id["_"]
+        ).transpose(1, 0)
         return questions_id_padded, answers_id_padded
